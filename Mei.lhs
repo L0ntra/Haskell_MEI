@@ -1,5 +1,9 @@
 > module Mei where
 
+
+> class Render a where
+>   render :: a -> String
+
 > data NoteName = A | B | C | D | E | F | G
 
 > instance Show NoteName where
@@ -60,6 +64,12 @@ The Accidental specifies if the note is sharp or flat
 >   show (MkNote a b c d) = 
 >     "(" ++ show a ++ " " ++ show b ++ " " ++ show c ++ " " ++ show d ++ ")"
 
+> instance Render Note where
+>   render (MkNote a b c d) = "<note "
+>                          ++ "pname=\"" ++ show a ++ "\" "
+>                          ++ "oct=\""   ++ show b ++ "\" "
+>                          ++ "dur=\""   ++ show c ++ "\" "
+>                          ++ "accid=\"" ++ show d ++ "\">"
 
 Layer
 A Layer is comprised of the Layer Number and one or more Notes
@@ -68,6 +78,11 @@ at the same time.
 
 > data Layer   = MkLayer Int [Note]
 >   deriving Show
+
+> instance Render Layer where
+>   render (MkLayer n b) = ("<layer n=\"" ++ show n ++ "\">"
+>                       ++ (concat (map render b))
+>                       ++ "</layer>")
 
 
 Staff:
@@ -78,12 +93,21 @@ being played at the same time
 > data Staff   = MkStaff Int [Layer]
 >   deriving Show
 
+> instance Render Staff where
+>   render (MkStaff n b) = ("<staff n=\"" ++ show n ++ "\">"
+>                       ++ (concat (map render b))
+>                       ++ "</layer>")
 
 Measure:
 A Measure is comprised of the Measure Number and one or more Staffs
 
 > data Measure = MkMeasure Int [Staff]
 >   deriving Show
+
+> instance Render Measure where
+>   render (MkMeasure n b) = ("<measure n=\"" ++ show n ++ "\">"
+>                         ++ (concat (map render b))
+>                         ++ "</measure>")
 
 
 Section:
@@ -92,6 +116,10 @@ A Section is comprised of one or more Measures
 > data Section = MkSection [Measure]
 >   deriving Show
 
+> instance Render Section where
+>   render (MkSection b) = ("<section>"
+>                       ++ (concat (map render b))
+>                       ++ "</section>>")
 
 Score:
 A Score is comprised of one or more Sections.
@@ -99,6 +127,13 @@ Currently there is no need to have more than one section.
 
 > data Score   = MkScore {-- scoreDef --} [Section]
 >   deriving Show
+
+> instance Render Score where
+>   render (MkScore b) = ("<music><body><mdiv><score>"
+>                     ++ (concat (map render b))
+>                     ++ "</score></mdiv></body><music>")
+
+> test = render (MkScore [MkSection [MkMeasure 1 [MkStaff 1 [MkLayer 1 [MkNote A (Oct 4) (Dur 4) None]]]]])
 
 Ex:
 
