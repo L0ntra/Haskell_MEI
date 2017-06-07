@@ -2,23 +2,58 @@
 > import IOActions
 > import Prelude hiding ((^^))
 
+
+Helper to function to indent during the render process
+
 > indent  :: Int -> String
 > indent n = '\n': replicate (n*2) ' '
 
+
+Items that are renderable are members of the render class.
+Only the rend method is required to be implemented in order to be
+a member of the render class
+
 > class Render a where
->   render :: a -> String
+>   render  :: [a] -> String
+>   render a = concat $ zipWith rend [1..] a
+>
+>   rend    :: Int -> a -> String
 
 
-> data NoteName = A | B | C | D | E | F | G
+> data NoteName =      C -- | Cs --TODO: Implement Logic for sharps
+>               | Db | D -- | Ds
+>               | Eb | E
+>                    | F -- | Fs
+>               | Gb | G -- | Gs
+>               | Ab | A -- | As
+>               | Bb | B
+>    deriving (Show, Enum, Eq)
 
-> instance Show NoteName where
->   show A = "a"
->   show B = "b"
->   show C = "c"
->   show D = "d"
->   show E = "e"
->   show F = "f"
->   show G = "g"
+> instance Render NoteName where
+>   rend n C  = "pname=\"c\" "
+>   -- rend n Cs = "pname=\"c\" accid=\"s\" "
+>   rend n Db = "pname=\"d\" accid=\"f\" "
+>   rend n D  = "pname=\"d\" "
+>   -- rend n Ds = "pname=\"d\" accid=\"s\" "
+>   rend n Eb = "pname=\"e\" accid=\"f\" "
+>   rend n E  = "pname=\"e\" "
+>   rend n F  = "pname=\"f\" "
+>   -- rend n Fs = "pname=\"f\" accid=\"s\" "
+>   rend n Gb = "pname=\"g\" accid=\"f\" "
+>   rend n G  = "pname=\"g\" "
+>   -- rend n Gs = "pname=\"g\" accid=\"s\" "
+>   rend n Ab = "pname=\"a\" accid=\"f\" "
+>   rend n A  = "pname=\"a\" "
+>   -- rend n As = "pname=\"a\" accid=\"s\" "
+>   rend n Bb = "pname=\"b\" accid=\"f\" "
+>   rend n B  = "pname=\"b\" "
+
+> namesToEnum :: [NoteName] -> [Int]
+> namesToEnum  = map fromEnum
+
+> enumToNames   :: [Int] -> [NoteName]
+> enumToNames ns = [(toEnum a) :: NoteName | a <- ns ]
+
 
 Octave:
 An Octave can be any natural number.
@@ -37,57 +72,35 @@ Duration can be powers of 2 up to 256
 > instance Show Duration where
 >   show (Dur a) = show a
 
-Accidental:
-TODO: add addition Accidentals specified in documentation
-http://music-encoding.org/documentation/3.0.0/data.ACCIDENTAL.EXPLICIT/
-
-> data Accidental = Sharp   | DSharp | TSharp
->                 | Flat    | DFlat  | TFlat
->                 | Natural | None
-
-> instance Show Accidental where
->   show Sharp   = "s"
->   show DSharp  = "ss"
->   show TSharp  = "ts"
->   show Flat    = "f"
->   show DFlat   = "ff"
->   show TFlat   = "tf"
->   show Natural = "n"
->   show None    = ""
->   show _       = "Unknown Accidental"
-
-
 Note:
 A note is made up of a combinations of a NoteName, Octave, Duration and Accidental
 The NoteName and Octave work together to place the node on the staff
 The Duration specifies what type of note it is (Ex: 4 = Quarter Note)
 The Accidental specifies if the note is sharp or flat
 
-> data Note = MkNote NoteName Octave Duration Accidental
+> data Note = MkNote NoteName Octave Duration
 
 > instance Show Note where
->   show (MkNote a b c d) = 
->     "(" ++ show a ++ " " ++ show b ++ " " ++ show c ++ " " ++ show d ++ ")"
+>   show (MkNote a b c) = 
+>     "(" ++ show a ++ " " ++ show b ++ " " ++ show c ++ " " ++ ")"
 
 > instance Render Note where
->   render (MkNote a b c d) = indent 8 ++ "<note "
->                          ++ "pname=\"" ++ show a ++ "\" "
->                          ++ "oct=\""   ++ show b ++ "\" "
->                          ++ "dur=\""   ++ show c ++ "\" "
->                          ++ "accid=\"" ++ show d ++ "\" />"
-
+>   rend n (MkNote a b c) = indent 8 ++ "<note "
+>                        ++ rend 0 a  
+>                        ++ "oct=\""   ++ show b ++ "\" "
+>                        ++ "dur=\""   ++ show c ++ "\" />"
 
 Layer
 A Layer is comprised of the Layer Number and one or more Notes
 Chords can be formed by specifying notes on different layers that occur
 at the same time.
 
-> data Layer   = MkLayer Int [Note]
+> data Layer   = MkLayer [Note]
 >   deriving Show
 
 > instance Render Layer where
->   render (MkLayer n b) = indent 7 ++ "<layer n=\"" ++ show n ++ "\">"
->                       ++ (concat (map render b))
+>   rend n (MkLayer notes) = indent 7 ++ "<layer n=\"" ++ show n ++ "\">"
+>                       ++ render notes
 >                       ++ indent 7 ++ "</layer>"
 
 
@@ -96,24 +109,25 @@ A Staff is comprised of the Staff Number and one or more Layers
 Multiple Staffs can be used to specify multipl clefs or instruments that are
 being played at the same time
 
-> data Staff   = MkStaff Int [Layer]
+> data Staff   = MkStaff [Layer]
 >   deriving Show
 
 > instance Render Staff where
->   render (MkStaff n b) = indent 6 ++ "<staff n=\"" ++ show n ++ "\">"
->                       ++ (concat (map render b))
->                       ++ indent 6 ++ "</staff>"
+>   rend n (MkStaff layers) = indent 6 ++ "<staff n=\"" ++ show n ++ "\">"
+>                        ++ render layers
+>                        ++ indent 6 ++ "</staff>"
+
 
 Measure:
 A Measure is comprised of the Measure Number and one or more Staffs
 
-> data Measure = MkMeasure Int [Staff]
+> data Measure = MkMeasure [Staff]
 >   deriving Show
 
 > instance Render Measure where
->   render (MkMeasure n b) = indent 5 ++ "<measure n=\"" ++ show n ++ "\">"
->                         ++ (concat (map render b))
->                         ++ indent 5 ++ "</measure>"
+>   rend n (MkMeasure staffs) = indent 5 ++ "<measure n=\"" ++ show n ++ "\">"
+>                          ++ render staffs
+>                          ++ indent 5 ++ "</measure>"
 
 
 Section:
@@ -123,9 +137,9 @@ A Section is comprised of one or more Measures
 >   deriving Show
 
 > instance Render Section where
->   render (MkSection b) = indent 4 ++ "<section>"
->                       ++ (concat (map render b))
->                       ++ indent 4 ++ "</section>"
+>   rend n (MkSection sects) = indent 4 ++ "<section>"
+>                           ++ render sects
+>                          ++ indent 4 ++ "</section>"
 
 Score:
 A Score is comprised of one or more Sections.
@@ -135,10 +149,15 @@ Currently there is no need to have more than one section.
 >   deriving Show
 
 > instance Render Score where
->   render (MkScore b) = indent 0 ++ "<music>" ++ indent 1 ++ "<body>" ++ indent 2 ++ "<mdiv>" ++ indent 3 ++ "<score>"
->                       ++ (render MkScoreDef)
->                       ++ (concat (map render b))
->                       ++ indent 3 ++ "</score>" ++ indent 2 ++ "</mdiv>" ++ indent 1 ++ "</body>" ++ indent 0 ++ "</music>"
+>   rend n (MkScore b) = indent 0 ++ "<music>" ++ indent 1 ++ "<body>" ++ indent 2 ++ "<mdiv>" ++ indent 3 ++ "<score>"
+>                   ++ show MkScoreDef
+>                   ++ render b
+>                   ++ indent 3 ++ "</score>" ++ indent 2 ++ "</mdiv>" ++ indent 1 ++ "</body>" ++ indent 0 ++ "</music>"
+
+
+> renderScore  :: Score -> String
+> renderScore s = render [s]
+
 > data ScoreDef = MkScoreDef
 
 > instance Show ScoreDef where
@@ -157,164 +176,107 @@ Currently there is no need to have more than one section.
 >            ++ indent 4 ++ "</scoreDef>"
 >
 
-> instance Render ScoreDef where
->   render = show 
 
-
-TODO: Simplify the infix operators to be easir to use:
-EX: 
-        !@ Note    -> Layer
-Note    @@ Note    -> Layer
-Note    @@ Layer   -> Layer
-Layer   @@ Note    -> Layer
-Layer   @@ Layer   -> Layer
-
-        !~ Layer   -> Staff
-Layer   ~~ Layer   -> Staff
-Layer   ~~ Staff   -> Staff
-Staff   ~~ Layer   -> Staff
-Staff   ~~ Staff   -> Staff
-
-        !^ Staff   -> Measure
-Staff   ^^ Staff   -> Measure
-Staff   ^^ Measure -> Measure
-Measure ^^ Staff   -> Measure
-Measure ^^ Measure -> Measure
-
-        !/ Measure -> Section
-Measure // Measure -> Section
-Measure // Section -> Section
-Section // Measure -> Section
-Section // Section -> Section
-
-        !% Section -> Score
-Section %% Section -> Score
-Section %% Score   -> Score
-Score   %% Section -> Score
-Score   %% Score   -> Score
+TODO: Further Simplify the Opertors to make writing a piece more intuitive
 
 Operators to build Layers out of Layes and Notes
 ------------------------------------------------
 
 Combine Two Notes together to make a Layer
 
-> infixl @@
+> infixr @@
 > (@@) :: Note -> Note -> Layer
-> a @@ b = MkLayer 1 [a, b]
-
-Append a Note to a layer
-
-> infixl ~@
-> (~@) :: Layer -> Note -> Layer
-> (MkLayer n as) ~@ b = MkLayer n (as ++ [b])
+> a @@ b = MkLayer [a, b]
 
 Prepend a Note to a Layer
 
-> infixl @~ 
-> (@~) :: Note -> Layer -> Layer
-> a @~ (MkLayer n bs) = MkLayer n (a:bs)
+> infixr @|
+> (@|) :: Note -> Layer -> Layer
+> a @| (MkLayer bs) = MkLayer (a:bs)
 
 Combine the notes from two layers together to create a single layer
 
-> infixl ~~~
-> (~~~) :: Layer -> Layer -> Layer
-> (MkLayer n1 as) ~~~ (MkLayer n2 bs) = MkLayer n1 (as ++ bs) --TODO: Make sure there are no bugs here
+> infixr @++
+> (@++) :: Layer -> Layer -> Layer
+> (MkLayer as) @++ (MkLayer bs) = MkLayer (as ++ bs) 
 
 Build a Layer out of a Single Note
 
-> (!^) :: Note -> Layer
-> (!^) a = MkLayer 1 [a]
+> (!@) :: Note -> Layer
+> (!@) a = MkLayer [a]
 
 Operators to build Staffs out of Layers and Staffs
 --------------------------------------------------
 
 Combine Two Layers together to make a Staff
 
-> infixl ~~^
-> (~~^) :: Layer -> Layer -> Staff
-> (MkLayer n1 as)  ~~^ (MkLayer n2 bs) = MkStaff 1 [MkLayer n1 as, MkLayer (n1 + 1) bs]
-
-Append a Layer to a Staff
-
-> infixl ^~
-> (^~) :: Staff -> Layer -> Staff
-> (MkStaff sn as) ^~ (MkLayer ln bs) = MkStaff sn (as ++ [MkLayer (length as +1) bs])
+> infixr ~~
+> (~~) :: Layer -> Layer -> Staff
+> (MkLayer as)  ~~ (MkLayer bs) = MkStaff [MkLayer as, MkLayer bs]
 
 Prepend a Layer to a Staff
 
-> infixl ~^
-> (~^) :: Layer -> Staff -> Staff
-> a ~^ (MkStaff n bs) = MkStaff n (a:bs)
+> infixr ~|
+> (~|) :: Layer -> Staff -> Staff
+> a ~| (MkStaff bs) = MkStaff (a:bs)
 
 Combine the Layers from tow Staffs to make a Single Staff
 
-> infixl ^^^
-> (^^^) :: Staff -> Staff -> Staff
-> (MkStaff n1 as) ^^^ (MkStaff n2 bs) = MkStaff n1 (as ++ bs) --TODO: Make sure there are no Bugs here
+> infixr ~++
+> (~++) :: Staff -> Staff -> Staff
+> (MkStaff as) ~++ (MkStaff bs) = MkStaff (as ++ bs)
 
 Build a Staff out of a single Layer
 
 > (!~) :: Layer -> Staff
-> (!~) a = MkStaff 1 [a]
+> (!~) a = MkStaff [a]
 
 Operators to build Measures out of Staffs and Measures
 ------------------------------------------------------
 
 Combine Two staffs to make a Measure
 
-> infixl ^^/
-> (^^/) :: Staff -> Staff -> Measure
-> (MkStaff n1 as) ^^/ (MkStaff n2 bs) = MkMeasure 1 [MkStaff n1 as, MkStaff (n1 + 1) bs]
-
-Append a Measure to a Staff
-
-> infixl /^
-> (/^) :: Measure -> Staff -> Measure
-> (MkMeasure nm as) /^ (MkStaff ns bs) = MkMeasure nm (as ++ [MkStaff (length as +1) bs])
+> infixr //
+> (//) :: Staff -> Staff -> Measure
+> (MkStaff as) // (MkStaff bs) = MkMeasure [MkStaff as, MkStaff bs]
 
 Prepend a Measure to a Staff
 
-> infixl ^/
-> (^/) :: Staff -> Measure -> Measure
-> a ^/ (MkMeasure n1 bs) = MkMeasure n1 (a:bs)
+> infixr /|
+> (/|) :: Staff -> Measure -> Measure
+> a /| (MkMeasure bs) = MkMeasure (a:bs)
 
 Combine the Staffs in two Measures to make a single Measure
 
-> infixl ///
-> (///) :: Measure -> Measure -> Measure
-> (MkMeasure n1 as) /// (MkMeasure n2 bs) = MkMeasure n1 (as ++ bs) --TODO: Make sure there are no bugs here
+> infixr /++
+> (/++) :: Measure -> Measure -> Measure
+> (MkMeasure as) /++ (MkMeasure bs) = MkMeasure (as ++ bs)
 
 Build a Measure out of a single Staff
 
 > (!/) :: Staff -> Measure
-> (!/) a = MkMeasure 1 [a]
+> (!/) a = MkMeasure [a]
 
 Operators to build Sections out of Measures and Sections
 --------------------------------------------------------
 
 Combine two Measures to make a Section
 
-> infixl //%
-> (//%) :: Measure -> Measure -> Section
-> (MkMeasure n1 as) //% (MkMeasure n2 bs) = MkSection [MkMeasure n1 as, MkMeasure (n1 + 1) bs]
-
-Append a Measure to a Section
-
-> infixl %/
-> (%/) :: Section -> Measure -> Section
-> (MkSection as) %/ MkMeasure n b = MkSection (as ++ [MkMeasure (length as + 1) b])
+> infixr %%
+> (%%) :: Measure -> Measure -> Section
+> (MkMeasure as) %% (MkMeasure bs) = MkSection [MkMeasure as, MkMeasure bs]
 
 Prepend a Measure to a Section
 
-> infixl /%
-> (/%) :: Measure -> Section -> Section
-> a /% (MkSection bs) = MkSection (a:bs) --TODO add 1 to all measure numbers
+> infixr %|
+> (%|) :: Measure -> Section -> Section
+> a %| (MkSection bs) = MkSection (a:bs)
 
 Combine the Measures in two Sections to Create a Single Section
 
-> infixl %%%
-> (%%%) :: Section -> Section -> Section
-> MkSection a %%% MkSection b = MkSection (a ++ b) --TODO: Make sure there are no bugs here
+> infixr %++
+> (%++) :: Section -> Section -> Section
+> MkSection a %++ MkSection b = MkSection (a ++ b)
 
 Build A section out of a single Measure
 
@@ -326,135 +288,183 @@ Operators to build the Score out of Sections
 
 Combine Two Sections to create a Score
 
-> infixl %%>
-> (%%>) :: Section -> Section -> Score
-> a %%> b = MkScore (a:[b])
-
-Append a Section to a Score
-
-> infix >%
-> (>%) :: Score -> Section -> Score
-> MkScore as >% b = MkScore (as ++ [b])
+> infixr ^^
+> (^^) :: Section -> Section -> Score
+> a ^^ b = MkScore (a:[b])
 
 Prepend a Section to a Score
 
-> infix %>
-> (%>) :: Section -> Score -> Score
-> a %> MkScore bs = MkScore (a:bs)
+> infixr ^|
+> (^|) :: Section -> Score -> Score
+> a ^| MkScore bs = MkScore (a:bs)
 
 Create a Score from a Single Section
 
-> (!>) :: Section -> Score
-> (!>) a = MkScore [a]
+> (!^) :: Section -> Score
+> (!^) a = MkScore [a]
 
-> testNoteA    = MkNote A (Oct 4) (Dur 4) None
-> testNoteB    = MkNote B (Oct 4) (Dur 4) None
+
+
+
+Testing:
+--------
+
+> testNoteA    = MkNote A (Oct 4) (Dur 4)
+> testNoteB    = MkNote B (Oct 4) (Dur 4)
 
 > testLayer1   = testNoteA    @@  testNoteB
-> testLayer2   = testNoteA    @~  testLayer1
-> testLayer3   = testLayer1   ~@  testNoteA
-> testLayer4   = testLayer1   ~~~ testLayer2
+> testLayer2   = testNoteA    @|  testLayer1
+> testLayer3   = testLayer1   @++ testLayer2
+> testLayer4   = (!@) testNoteA
 
-> testStaff1   = testLayer1   ~~^ testLayer2
-> testStaff2   = testLayer1   ~^  testStaff1
-> testStaff3   = testStaff1   ^~  testLayer1
-> testStaff4   = testStaff1   ^^^ testStaff2
+> testStaff1   = testLayer1   ~~ testLayer2
+> testStaff2   = testLayer1   ~|  testStaff1
+> testStaff3   = testStaff1   ~++ testStaff2
+> testStaff4   = (!~) testLayer1
 
-> testMeasure1 = testStaff1   ^^/ testStaff2
-> testMeasure2 = testStaff1   ^/  testMeasure1
-> testMeasure3 = testMeasure1 /^  testStaff1
-> testMeasure4 = testMeasure1 /// testMeasure2
+> testMeasure1 = testStaff1   // testStaff2
+> testMeasure2 = testStaff1   /|  testMeasure1
+> testMeasure3 = testMeasure1 /++ testMeasure2
+> testMeasure4 = (!/) testStaff1
 
-> testSection1 = testMeasure1 //% testMeasure2
-> testSection2 = testMeasure1 /%  testSection1
-> testSection3 = testSection1 %/  testMeasure1
-> testSection4 = testSection1 %%% testSection2
+> testSection1 = testMeasure1 %% testMeasure2
+> testSection2 = testMeasure1 %|  testSection1
+> testSection3 = testSection1 %++ testSection2
+> testSection4 = (!%) testMeasure1
 
-> testScore1   = testSection1 %%> testSection2
-> testScore2   = testSection1 %>  testScore1
-> testScore3   = testScore1   >%  testSection1
-> testScore4   = (!>) testSection1
-
-
-> testRender  = render (MkScore [MkSection [MkMeasure 1 [MkStaff 1 [MkLayer 1 [MkNote A (Oct 4) (Dur 4) None]]]]])
-> testRender2 = render (MkScore [MkSection [MkMeasure 1 [MkStaff 1 [MkLayer 1 [MkNote C (Oct 4) (Dur 2) None,
->                                                                              MkNote E (Oct 4) (Dur 2) None],
->                                                                   MkLayer 2 [MkNote E (Oct 4) (Dur 2) None,
->                                                                              MkNote G (Oct 4) (Dur 2) None]]]]])
+> testScore1   = testSection1 ^^ testSection2
+> testScore2   = testSection1 ^|  testScore1
+> testScore3   = (!^) testSection1
 
 
-Mary had a little lamb written in operator notation
-
-> lamb = (!>) $ 
->   (!%) ( (!/) ( (!~) 
->   (  (MkNote E (Oct 4) (Dur 4) None)
->   @@ (MkNote D (Oct 4) (Dur 4) None)
->   ~@ (MkNote C (Oct 4) (Dur 4) None)
->   ~@ (MkNote D (Oct 4) (Dur 4) None)
->   ))) %/ (
->   (!/) ( (!~) 
->   (  (MkNote E (Oct 4) (Dur 4) None)
->   @@ (MkNote E (Oct 4) (Dur 4) None)
->   ~@ (MkNote E (Oct 4) (Dur 2) None)  
->   ))) %/ ( 
->   (!/) ( (!~) 
->   (  (MkNote D (Oct 4) (Dur 4) None)
->   @@ (MkNote D (Oct 4) (Dur 4) None)
->   ~@ (MkNote D (Oct 4) (Dur 2) None)
->   ))) %/ (
->   (!/) ( (!~)
->   (  (MkNote E (Oct 4) (Dur 4) None)
->   @@ (MkNote G (Oct 4) (Dur 4) None)
->   ~@ (MkNote G (Oct 4) (Dur 2) None)
->   ))) %/ (
->   (!/) ( (!~)
->   (  (MkNote E (Oct 4) (Dur 4) None)
->   @@ (MkNote D (Oct 4) (Dur 4) None)
->   ~@ (MkNote C (Oct 4) (Dur 4) None)
->   ~@ (MkNote D (Oct 4) (Dur 4) None)
->   ))) %/ (
->   (!/) ( (!~)
->   (  (MkNote E (Oct 4) (Dur 4) None)
->   @@ (MkNote E (Oct 4) (Dur 4) None)
->   ~@ (MkNote E (Oct 4) (Dur 4) None)
->   ~@ (MkNote E (Oct 4) (Dur 4) None)
->   ))) %/ (
->   (!/) ( (!~)
->   (  (MkNote D (Oct 4) (Dur 4) None)
->   @@ (MkNote D (Oct 4) (Dur 4) None)
->   ~@ (MkNote E (Oct 4) (Dur 4) None)
->   ~@ (MkNote D (Oct 4) (Dur 4) None)
->   ))) %/ (
->   (!/) ( (!~) (
->   (!^) ( (MkNote C (Oct 4) (Dur 1) None)))))
+> testRender  = renderScore (MkScore [MkSection [MkMeasure [MkStaff [MkLayer [MkNote A (Oct 4) (Dur 4)]]]]])
+> testRender2 = renderScore (MkScore [MkSection [MkMeasure [MkStaff [MkLayer [MkNote C (Oct 4) (Dur 2),
+>                                                                             MkNote E (Oct 4) (Dur 2)],
+>                                                                    MkLayer [MkNote E (Oct 4) (Dur 2),
+>                                                                             MkNote G (Oct 4) (Dur 2)]]]]])
 
 
-Ex:
 
-MkScore 
-  [ MkSection 
-    [ MkMeasure 1 
-      [ MkStaff 1 
-        [ MkLayer 1 
-          [ MkNote C (Oct 4) (Dur 2) None,
-            MkNote E (Oct 4) (Dur 2) None 
-          ],
-          MkLayer 2
-          [ MkNote E (Oct 4) (Dur 2) None,
-            MkNote G (Cot 4) (Dur 2) None
-          ]
-        ]
-      ]
-    ]
-  ]
+Example Piece
+Mary had a little lamb Written in operator notation
 
-Represents:     
-[--|--------------]
-[--|--------|-----]
-[--|---|----|-----]
-[--|---|---O|-----]
-[--|--O|---O`-----]
-     -O'-
+> lamb = (!^) $  
+>     ((!/) ( (!~) (  
+>       (MkNote E (Oct 4) (Dur 4))
+>       @| (MkNote D (Oct 4) (Dur 4))
+>       @| (MkNote C (Oct 4) (Dur 4))
+>       @@ (MkNote D (Oct 4) (Dur 4))
+>       ))) %| (
+>     (!/) ( (!~) (
+>       (MkNote E (Oct 4) (Dur 4))
+>       @| (MkNote E (Oct 4) (Dur 4))
+>       @@ (MkNote E (Oct 4) (Dur 2))  
+>       ))) %| (
+>     (!/) ( (!~) (
+>       (MkNote D (Oct 4) (Dur 4))
+>       @| (MkNote D (Oct 4) (Dur 4))
+>       @@ (MkNote D (Oct 4) (Dur 2))
+>       ))) %| (
+>     (!/) ( (!~) (
+>       (MkNote E (Oct 4) (Dur 4))
+>       @| (MkNote G (Oct 4) (Dur 4))
+>       @@ (MkNote G (Oct 4) (Dur 2))
+>       ))) %| (
+>     (!/) ( (!~) (
+>       (MkNote E (Oct 4) (Dur 4))
+>       @| (MkNote D (Oct 4) (Dur 4))
+>       @| (MkNote C (Oct 4) (Dur 4))
+>       @@ (MkNote D (Oct 4) (Dur 4))
+>       ))) %| (
+>     (!/) ( (!~) (
+>       (MkNote E (Oct 4) (Dur 4))
+>       @| (MkNote E (Oct 4) (Dur 4))
+>       @| (MkNote E (Oct 4) (Dur 4))
+>       @@ (MkNote E (Oct 4) (Dur 4))
+>       ))) %| (
+>     (!/) ( (!~) (
+>       (MkNote D (Oct 4) (Dur 4))
+>       @| (MkNote D (Oct 4) (Dur 4))
+>       @| (MkNote E (Oct 4) (Dur 4))
+>       @@ (MkNote D (Oct 4) (Dur 4))
+>       ))) %% (
+>     (!/) ( (!~) ( (!@) (
+>       (MkNote C (Oct 4) (Dur 1))
+>       ))))
+
+Example Piece
+Mary Had a little lamb Written using Constructors
+
+> lamb2 = 
+>   MkScore [
+>     MkSection [
+>       MkMeasure [
+>         MkStaff [
+>           MkLayer [
+>             (MkNote E (Oct 4) (Dur 4)),
+>             (MkNote D (Oct 4) (Dur 4)),
+>             (MkNote C (Oct 4) (Dur 4)),
+>             (MkNote D (Oct 4) (Dur 4))]]],
+>       MkMeasure [
+>         MkStaff [
+>           MkLayer [
+>             (MkNote E (Oct 4) (Dur 4)),
+>             (MkNote E (Oct 4) (Dur 4)),
+>             (MkNote E (Oct 4) (Dur 2))]]], 
+>       MkMeasure [
+>         MkStaff [
+>           MkLayer [
+>             (MkNote D (Oct 4) (Dur 4)),
+>             (MkNote D (Oct 4) (Dur 4)),
+>             (MkNote D (Oct 4) (Dur 2))]]],
+>       MkMeasure [
+>         MkStaff [
+>           MkLayer [
+>             (MkNote E (Oct 4) (Dur 4)),
+>             (MkNote G (Oct 4) (Dur 4)),
+>             (MkNote G (Oct 4) (Dur 2))]]],
+>       MkMeasure [
+>         MkStaff [
+>           MkLayer [
+>             (MkNote E (Oct 4) (Dur 4)),
+>             (MkNote D (Oct 4) (Dur 4)),
+>             (MkNote C (Oct 4) (Dur 4)),
+>             (MkNote D (Oct 4) (Dur 4))]]],
+>       MkMeasure [
+>         MkStaff [
+>           MkLayer [
+>             (MkNote E (Oct 4) (Dur 4)),
+>             (MkNote E (Oct 4) (Dur 4)),
+>             (MkNote E (Oct 4) (Dur 4)),
+>             (MkNote E (Oct 4) (Dur 4))]]],
+>       MkMeasure [
+>         MkStaff [
+>           MkLayer [
+>             (MkNote D (Oct 4) (Dur 4)),
+>             (MkNote D (Oct 4) (Dur 4)),
+>             (MkNote E (Oct 4) (Dur 4)),
+>             (MkNote D (Oct 4) (Dur 4))]]],
+>       MkMeasure [
+>         MkStaff [
+>           MkLayer [
+>            (MkNote C (Oct 4) (Dur 1))]]]]]
+
+> chromaticScale = 
+>   (!^) $ (!%) $ (!/) $ (!~) $
+>   (MkNote C (Oct 4) (Dur 4))
+>   @| (MkNote Db (Oct 4) (Dur 4))
+>   @| (MkNote D  (Oct 4) (Dur 4))
+>   @| (MkNote Eb (Oct 4) (Dur 4))
+>   @| (MkNote E (Oct 4) (Dur 4))
+>   @| (MkNote F (Oct 4) (Dur 4))
+>   @| (MkNote Gb (Oct 4) (Dur 4))
+>   @| (MkNote G (Oct 4) (Dur 4))
+>   @| (MkNote Ab (Oct 4) (Dur 4))
+>   @| (MkNote A (Oct 4) (Dur 4))
+>   @| (MkNote Bb (Oct 4) (Dur 4))
+>   @| (MkNote B (Oct 4) (Dur 4))
+>   @@ (MkNote C (Oct 5) (Dur 4))
+
 
 
 
