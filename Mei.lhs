@@ -46,7 +46,8 @@ more easily
 >               | Gb | G -- | Gs
 >               | Ab | A -- | As
 >               | Bb | B
->    deriving (Show, Enum, Eq)
+>   deriving (Show, Enum, Eq, Ord)
+
 
 > renderNoteName :: NoteName -> String
 > renderNoteName C  = "pname=\"c\" "
@@ -67,11 +68,11 @@ more easily
 > renderNoteName Bb = "pname=\"b\" accid=\"f\" "
 > renderNoteName B  = "pname=\"b\" "
 
-> namesToEnum :: [NoteName] -> [Int]
-> namesToEnum  = map fromEnum
 
-> enumToNames   :: [Int] -> [NoteName]
-> enumToNames ns = [(toEnum a) :: NoteName | a <- ns ]
+Generates a looping list of notenames starting at note n
+
+> infScale  :: NoteName -> [NoteName]
+> infScale n = [n..] ++ infScale C
 
 
 Octave:
@@ -81,13 +82,14 @@ It may be reasonable to expand or contract this range to to future experience
 Inspiration for Smart Constructor: https://wiki.haskell.org/Smart_constructors
 
 > data Octave = Oct { octa :: Int }
+>   deriving (Eq)
 
 > instance Show Octave where
 >   show (Oct a) = show a
 
 > oct                     :: Int -> Octave
 > oct n | (elem n [0..10]) = Oct n
-> oct _                    = error "Invalid value for Octave"
+> oct n                    = error ("Octave: " ++ show n ++ " out of range.")
 
 
 Duration:
@@ -96,13 +98,14 @@ Duration can be powers of 2 up to 256
 Inspiration for Smart Constructor: https://wiki.haskell.org/Smart_constructors
 
 > data Duration = Dur Int
+>   deriving (Eq)
 
 > instance Show Duration where
 >   show (Dur a) = show a
 
 > dur                                          :: Int -> Duration
 > dur n | (elem n (zipWith (^) [2,2..] [0..8])) = Dur n
-> dur _                                         = error "Invalid value for Duration"
+> dur n                                         = error "Invalid value for Duration"
 
 
 Note:
@@ -115,9 +118,13 @@ A Note is either a Singe Note, a Rest, or a Chord:
   A Chord ... TODO:
 Notes are the primary building blocks for Layers
 
-> data Note = MkNote {name :: NoteName, octave :: Octave, duration :: Duration}
->           | MkRest {duration :: Duration}
->           | MkChord { nts :: [(NoteName, Octave)], duration :: Duration }
+> data Note = MkNote  {name     :: NoteName, 
+>                      octave   :: Octave, 
+>                      duration :: Duration}
+>           | MkRest  {duration :: Duration}
+>           | MkChord {nts      :: [(NoteName, Octave)],
+>                      duration :: Duration}
+>   deriving (Eq)
 
 > instance Show Note where
 >   show (MkNote name octave duration) = "(" ++ show name ++ " " ++ show octave ++ " " ++ show duration ++ ")"
@@ -142,14 +149,19 @@ Notes are the primary building blocks for Layers
 >
 >   --                                  :: (Int -> Int) -> Note -> Note
 >   harmonize sft (MkNote nt o d)        = notesToChord [MkNote nt o d, transpose sft (MkNote nt o d)]
->   harmonize _   n                      = n -- Catches the cases where harmonization is note possible Ex: Chord, Rest
+>   harmonize _   n                      = n -- Catches the cases where harmonization is not possible Ex: Chord, Rest
+>                                            -- TODO: Implement harmonize for chords
 >
 >   --                                  :: (Int -> Int) -> Note -> Note
->   transpose sft (MkChord nts d)        = MkChord (map (\ (n, o) -> (toEnum ((sft (fromEnum n) ) `mod` 11) ::NoteName, 
->                                                                    (oct ((octa o) + ((sft (fromEnum n)) `div` 11))))) nts) d 
->   transpose sft (MkNote nt o d)        = MkNote  (toEnum ((sft ( fromEnum nt) ) `mod` 11) :: NoteName) 
->                                                  (oct ((octa o) + ((sft (fromEnum nt)) `div` 11))) d
->   transpose _ n                        = n -- Catches the cases where shiftig does nothing Ex: Rest
+>   transpose sft (MkChord nts d)        = MkChord (map (shiftNote sft) nts) d 
+>   transpose sft (MkNote nt o d)        = MkNote  (fst nto) (snd nto)       d
+>                                            where nto = shiftNote sft (nt, o)
+>   transpose _ n                        = n -- Catches the cases where shifting does nothing Ex: Rest
+
+> shiftNote           :: (Int -> Int) -> (NoteName, Octave) -> (NoteName, Octave)
+> shiftNote sft (n, o) = (toEnum ((ntNum n o) `mod` 12) :: NoteName,
+>                         oct    ((ntNum n o) `div` 12))
+>                           where ntNum n o = sft ((fromEnum n) + (octa o * 12))
 
 Takes a list of indivdual notes and makes a chord out of them
 TODO: Allow Notes to be added to a Cords
@@ -169,7 +181,7 @@ A Layer is comprised of one or more Notes.
 Layers are the primary building blocks for Staffs.
 
 > data Layer = MkLayer { notes :: [Note] }
->   deriving Show
+>   deriving (Eq, Show)
 
 > instance MeiElement Layer where
 >   --             :: Int -> Layer -> String
@@ -183,7 +195,7 @@ Layers are the primary building blocks for Staffs.
 >   --             :: (Int -> Int) -> Layer -> Layer
 >   transpose sft n = MkLayer (map (transpose sft) (notes n))
 
-Combine the notes in two layers into a Layer of Chords
+Combine the notes from two Layers into a single Layer of Chords
 TODO: Implement a method to check that the notes between the two layers are the same duration
       If they are then make chords out of them
       If they are not then leave them as two seporate layers
@@ -202,7 +214,7 @@ Currently, with out ScoreDef being implementd, only a single staff is supported.
 TODO: Implement ScoreDef to enable the use of multiple Staffs
 
 > data Staff = MkStaff { layers :: [Layer] }
->   deriving Show
+>   deriving (Eq, Show)
 
 > instance MeiElement Staff where
 >   --             :: Int -> Staff -> String
@@ -223,7 +235,7 @@ A Measure is comprised of one or more Staffs.
 Measures are the primary building blocks for Sections.
 
 > data Measure = MkMeasure { staffs :: [Staff] }
->   deriving Show
+>   deriving (Eq, Show)
 
 > instance MeiElement Measure where
 >   --             :: Int -> Measure -> String
@@ -244,7 +256,7 @@ A Section is comprised of one or more Measures.
 Sections are the primary building blocks for Scores.
 
 > data Section = MkSection { measures :: [Measure] } 
->   deriving Show
+>   deriving (Eq, Show)
 
 > instance MeiElement Section where
 >   --             :: Int -> Section -> String
@@ -265,7 +277,7 @@ A Score is comprised of one or more Sections.
 Currently there is no need to have more than one section.
 
 > data Score   = MkScore { {-- scoreDef :: ScoreDef, --} sections :: [Section] }
->   deriving Show
+>   deriving (Eq, Show)
 
 > instance MeiElement Score where
 >   --              :: Int -> Section -> String
@@ -472,48 +484,9 @@ Create a Score from a Single Section
 > (!^) section          = MkScore [section]
 
 
+EXAMPLES:
 
-TESTING:
-========
-
-> testNoteA    = MkNote C (oct 4) (dur 4)
-> testNoteB    = MkNote D (oct 4) (dur 4)
-
-> testLayer1   = testNoteA    @@  testNoteB
-> testLayer2   = testNoteA    @|  testLayer1
-> testLayer3   = testLayer1   @++ testLayer2
-> testLayer4   = (!@) testNoteA
-
-> testStaff1   = testLayer1   ~~ testLayer2
-> testStaff2   = testLayer1   ~|  testStaff1
-> testStaff3   = testStaff1   ~++ testStaff2
-> testStaff4   = (!~) testLayer1
-
-> testMeasure1 = testStaff1   // testStaff2
-> testMeasure2 = testStaff1   /|  testMeasure1
-> testMeasure3 = testMeasure1 /++ testMeasure2
-> testMeasure4 = (!/) testStaff1
-
-> testSection1 = testMeasure1 %% testMeasure2
-> testSection2 = testMeasure1 %|  testSection1
-> testSection3 = testSection1 %++ testSection2
-> testSection4 = (!%) testMeasure1
-
-> testScore1   = testSection1 ^^ testSection2
-> testScore2   = testSection1 ^|  testScore1
-> testScore3   = (!^) testSection1
-
-
-> testRender  = renderScore (MkScore [MkSection [MkMeasure [MkStaff [MkLayer [MkNote A (oct 4) (dur 4)]]]]])
-> testRender2 = renderScore (MkScore [MkSection [MkMeasure [MkStaff [MkLayer [MkNote C (oct 4) (dur 2),
->                                                                             MkNote E (oct 4) (dur 2)],
->                                                                    MkLayer [MkNote E (oct 4) (dur 2),
->                                                                             MkNote G (oct 4) (dur 2)]]]]])
-
-
-
-Example Piece
-Mary had a little lamb Written in operator notation
+Mary had a little lamb Written with operator notation
 
 > lamb = (!^) $  
 >     ((!/) ( (!~) (  
@@ -619,18 +592,52 @@ Mary Had a little lamb Written using Constructors
 >            (MkNote C (oct 4) (dur 2)),
 >            (MkRest (dur 2))]]]]]
 
-> chromaticScale = 
->   (!^) $ (!%) $ (!/) $ (!~) $
->   (MkNote C (oct 4) (dur 4))
->   @| (MkNote Db (oct 4) (dur 4))
->   @| (MkNote D  (oct 4) (dur 4))
->   @| (MkNote Eb (oct 4) (dur 4))
->   @| (MkNote E (oct 4) (dur 4))
->   @| (MkNote F (oct 4) (dur 4))
->   @| (MkNote Gb (oct 4) (dur 4))
->   @| (MkNote G (oct 4) (dur 4))
->   @| (MkNote Ab (oct 4) (dur 4))
->   @| (MkNote A (oct 4) (dur 4))
->   @| (MkNote Bb (oct 4) (dur 4))
->   @| (MkNote B (oct 4) (dur 4))
->   @@ (MkNote C (oct 5) (dur 4))
+
+TESTING:
+========
+
+> testNote    :: NoteName -> Note
+> testNote n   = MkNote n (oct 4) (dur 4)
+
+> testLayer1   = (testNote A) @@  (testNote B)
+> testLayer2   = (testNote A) @|  testLayer1
+> testLayer3   = testLayer1   @++ testLayer2
+> testLayer4   = (!@) $ testNote A
+
+> testStaff1   = testLayer1   ~~ testLayer2
+> testStaff2   = testLayer1   ~|  testStaff1
+> testStaff3   = testStaff1   ~++ testStaff2
+> testStaff4   = (!~) testLayer1
+
+> testMeasure1 = testStaff1   // testStaff2
+> testMeasure2 = testStaff1   /|  testMeasure1
+> testMeasure3 = testMeasure1 /++ testMeasure2
+> testMeasure4 = (!/) testStaff1
+
+> testSection1 = testMeasure1 %% testMeasure2
+> testSection2 = testMeasure1 %|  testSection1
+> testSection3 = testSection1 %++ testSection2
+> testSection4 = (!%) testMeasure1
+
+> testScore1   = testSection1 ^^ testSection2
+> testScore2   = testSection1 ^|  testScore1
+> testScore3   = (!^) testSection1
+
+> testRender  = renderScore (MkScore [MkSection [MkMeasure [MkStaff [MkLayer [MkNote A (oct 4) (dur 4)]]]]])
+> testRender2 = renderScore (MkScore [MkSection [MkMeasure [MkStaff [MkLayer [MkNote C (oct 4) (dur 2),
+>                                                                             MkNote E (oct 4) (dur 2)],
+>                                                                    MkLayer [MkNote E (oct 4) (dur 2),
+>                                                                             MkNote G (oct 4) (dur 2)]]]]])
+
+
+> chromaticScale  :: Int -> Score
+> chromaticScale o = 
+>   (!^) $ (!%) $ (!/) $ (!~) $  
+>   MkLayer (map (\x -> MkNote x (oct o) (dur 8)) [C :: NoteName ..])
+
+
+TODO: Make new function 'transform' and use it to implement 'transpose'
+
+> transposeTest = (chromaticScale 4) ==  transpose (subtract 12) (chromaticScale 5)
+
+> 
